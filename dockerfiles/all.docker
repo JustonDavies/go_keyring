@@ -1,0 +1,38 @@
+#-- Build base image ---------------------------------------------------------------------------------------------------
+FROM dockercore/golang-cross AS build_base
+
+# Set timezone to UTC by default
+RUN ln -sf /usr/share/zoneinfo/Etc/UTC /etc/localtime
+
+# Use unicode
+RUN locale-gen C.UTF-8 || true
+ENV LANG=C.UTF-8
+
+# Set working directory
+WORKDIR /go/src/github.com/justondavies/go_keyring/
+
+# Download dependencies
+RUN apt-get install --yes --quiet libsecret-common libsecret-1-0 libsecret-1-dev
+
+# Download go modules
+ENV GO111MODULE=on
+
+COPY go.mod ./
+COPY go.sum ./
+
+RUN go mod download
+
+#-- Build container ----------------------------------------------------------------------------------------------------
+FROM build_base AS build
+
+# Copy project code
+COPY ./ ./
+
+RUN ls -hal /usr/bin | grep gcc
+
+# Build artifact
+RUN CGO_ENABLED=1 CC=gcc                    GOOS=linux   GOARCH=amd64 go build -ldflags '-linkmode external -extldflags -static -w' -o build/keyring_linux       cmd/query/main.go
+#RUN CGO_ENABLED=1 CC=o64-clang              GOOS=darwin  GOARCH=amd64 go build -ldflags '-linkmode external -extldflags         -w' -o build/keyring_darwin      cmd/query/main.go
+#RUN CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc GOOS=windows GOARCH=amd64 go build -ldflags '-linkmode external -extldflags -static -w' -o build/keyring_windows.exe cmd/query/main.go
+
+#NOTE: This is done better in every possible way at: https://github.com/docker/cli
